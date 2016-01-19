@@ -2,6 +2,7 @@
 from __future__ import print_function
 import optparse
 import os
+import re
 import sys
 import itertools
 import mimetypes
@@ -43,7 +44,7 @@ _LANGUAGE_GUESS = {
     '.php': 'PHP',
     '.rb': 'Ruby'
 }
-_GUESS_MAINCLASS = set(['Java', 'Python'])
+_GUESS_MAINCLASS = set(['Java', 'Python 2', 'Python 3'])
 
 
 class MultiPartForm(object):
@@ -152,6 +153,47 @@ loginurl: https://<kattis>/login
 submissionurl: https://<kattis>/submit
 '''
 
+def is_python2(filename):
+    try:
+        with open(filename) as f:
+            first = True
+            py2 = re.compile(r'^\s*\bprint\b *[^ \(]|\braw_input\b')
+            for line in f:
+                if first and line.startswith('#!'):
+                    if 'python2' in line:
+                        return True
+                    if 'python3' in line:
+                        return False
+                first = False
+                ind = line.find('#')
+                if ind != -1:
+                    line = line[:ind]
+                if py2.search(line):
+                    return True
+            return False
+    except FileNotFoundError:
+        return False
+
+def guess_language(ext, files):
+    if ext == ".C":
+        return "C++"
+    ext = ext.lower()
+    if ext == ".h":
+        if some(os.path.basename(f).endswith(".c") for f in files):
+            return "C"
+        else:
+            return "C++"
+    if ext == ".py":
+        if is_python2(files[0]):
+            return "Python 2"
+        else:
+            return "Python 3"
+    return _LANGUAGE_GUESS.get(ext, None)
+
+def guess_mainclass(language, problem):
+    if language in _GUESS_MAINCLASS:
+        return problem
+    return None
 
 def get_url(cfg, option, default):
     if cfg.has_option('kattis', option):
@@ -201,8 +243,8 @@ Overrides default guess (based on suffix of first filename)''', default=None)
         sys.exit(1)
 
     problem, ext = os.path.splitext(os.path.basename(args[0]))
-    language = _LANGUAGE_GUESS.get(ext, None)
-    mainclass = problem if language in _GUESS_MAINCLASS else None
+    language = guess_language(ext, args)
+    mainclass = guess_mainclass(language, problem)
     tag = opts.tag
     debug = opts.debug
 
