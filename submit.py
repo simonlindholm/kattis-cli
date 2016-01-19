@@ -44,7 +44,7 @@ _LANGUAGE_GUESS = {
     '.php': 'PHP',
     '.rb': 'Ruby'
 }
-_GUESS_MAINCLASS = set(['Java', 'Python 2', 'Python 3'])
+_NEEDS_MAINFILE = ['Python 2', 'Python 3', 'PHP', 'JavaScript']
 
 
 class MultiPartForm(object):
@@ -190,9 +190,28 @@ def guess_language(ext, files):
             return "Python 3"
     return _LANGUAGE_GUESS.get(ext, None)
 
-def guess_mainclass(language, problem):
-    if language in _GUESS_MAINCLASS:
-        return problem
+def java_file_contains_main(filename):
+    try:
+        with open(filename) as f:
+            return re.search(r' main\s*\(', f.read())
+    except FileNotFoundError:
+        return False
+
+def guess_mainclass(language, files):
+    if language == "Java" or (language in _NEEDS_MAINFILE and len(files) > 1):
+        is_java = (language == "Java")
+        filenames = [os.path.basename(fname) for fname in files]
+        for filename in filenames:
+            filename = os.path.basename(filename)
+            problem, ext = os.path.splitext(filename)
+            if problem == "main" or problem == "Main":
+                return problem if is_java else filename
+        if is_java:
+            for f, filename in zip(files, filenames):
+                if filename.lower().endswith('.java') and java_file_contains_main(f):
+                    return filename[:-5]
+        else:
+            return filenames[0]
     return None
 
 def get_url(cfg, option, default):
@@ -244,7 +263,7 @@ Overrides default guess (based on suffix of first filename)''', default=None)
 
     problem, ext = os.path.splitext(os.path.basename(args[0]))
     language = guess_language(ext, args)
-    mainclass = guess_mainclass(language, problem)
+    mainclass = guess_mainclass(language, args)
     tag = opts.tag
     debug = opts.debug
 
